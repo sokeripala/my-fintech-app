@@ -33,11 +33,21 @@ with tab1:
                 info = stock.info
                 
                 # Yritetään hakea taseen luvut
+                # Yritetään hakea taseen luvut
                 balance_sheet = stock.balance_sheet
                 if not balance_sheet.empty and 'Total Assets' in balance_sheet.index:
                     total_assets = balance_sheet.loc['Total Assets'].iloc[0]
-                    total_liabilities = balance_sheet.loc['Total Liabilities Net Minority Interest'].iloc[0]
+                    
+                    # Älykäs velkojen haku: kokeillaan kahta eri nimeä
+                    if 'Total Liabilities Net Minority Interest' in balance_sheet.index:
+                        total_liabilities = balance_sheet.loc['Total Liabilities Net Minority Interest'].iloc[0]
+                    elif 'Total Liabilities' in balance_sheet.index:
+                        total_liabilities = balance_sheet.loc['Total Liabilities'].iloc[0]
+                    else:
+                        total_liabilities = 0 # Jos kumpaakaan ei löydy, estetään kaatuminen
+                        
                     working_capital = total_assets - total_liabilities
+                    z_score = 1.2 * (working_capital / total_assets)
                     z_score = 1.2 * (working_capital / total_assets)
                 else:
                     z_score = None # Dataa ei saatavilla
