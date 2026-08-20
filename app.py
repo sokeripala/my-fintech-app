@@ -203,7 +203,7 @@ with tab2:
         st.line_chart(df, color=["#10b981", "#f97316", "#ef4444", "#94a3b8"])
         
         # Lopputulokset 
-        loppuarvo = data[-1]["Yhdistelmäsalkun Arvo (€)"]
+        loppuarvo = data[-1]["Yhdistelmäsalkku (€)"]
         omat_rahat = data[-1]["Sijoitettu Pääoma (€)"]
         
         st.write("*(Kaikki yllä olevan graafin luvut ovat nykyrahassa, eli inflaation syömä ostovoima on jo vähennetty tuotoista)*")
