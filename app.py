@@ -21,47 +21,48 @@ with tab1:
     st.header("Osake-Screener & Riskilista")
     st.write("Analysoi yksittäisiä osakkeita ja kerää niistä itsellesi seurantalista oikealle.")
     
-    col_screener, col_list = st.columns([1, 1.2])
+    col_screener, col_list = st.columns([1, 1.8]) # Levennettiin oikeaa palstaa taulukolle
     
     with col_screener:
         st.subheader("Hae osaketta")
-        ticker = st.text_input("Syötä tikkeri (esim. AAPL, KONE.HE, MSFT):", "MSFT").upper()
+        ticker = st.text_input("Syötä tikkeri (esim. AAPL, KONE.HE, GOOGL):", "MSFT").upper()
 
         if st.button("Analysoi ja lisää listalle"):
             try:
                 stock = yf.Ticker(ticker)
                 info = stock.info
                 
-                # Yritetään hakea taseen luvut
-                # Yritetään hakea taseen luvut
+                # Yritetään hakea taseen luvut (Pomminkestävä versio)
                 balance_sheet = stock.balance_sheet
                 if not balance_sheet.empty and 'Total Assets' in balance_sheet.index:
                     total_assets = balance_sheet.loc['Total Assets'].iloc[0]
                     
-                    # Älykäs velkojen haku: kokeillaan kahta eri nimeä
                     if 'Total Liabilities Net Minority Interest' in balance_sheet.index:
                         total_liabilities = balance_sheet.loc['Total Liabilities Net Minority Interest'].iloc[0]
                     elif 'Total Liabilities' in balance_sheet.index:
                         total_liabilities = balance_sheet.loc['Total Liabilities'].iloc[0]
                     else:
-                        total_liabilities = 0 # Jos kumpaakaan ei löydy, estetään kaatuminen
+                        total_liabilities = 0
                         
                     working_capital = total_assets - total_liabilities
                     z_score = 1.2 * (working_capital / total_assets)
-                    z_score = 1.2 * (working_capital / total_assets)
                 else:
-                    z_score = None # Dataa ei saatavilla
+                    z_score = None 
                 
-                # Haetaan Beta ja P/E
+                # Haetaan uudet riskimittarit ja tunnusluvut
                 beta = info.get('beta', None)
                 pe_ratio = info.get('forwardPE', None)
+                current_ratio = info.get('currentRatio', None)
+                debt_to_equity = info.get('debtToEquity', None)
                 
                 # Lisätään osake välimuistin seurantalistalle
                 st.session_state.watchlist.append({
                     "Tikkeri": ticker,
                     "Nimi": info.get('shortName', ticker),
                     "Z-Score (Konkurssiriski)": round(z_score, 2) if z_score else "N/A",
-                    "Beta (Volatiliteetti)": round(beta, 2) if beta else "N/A",
+                    "Beta (Heilunta)": round(beta, 2) if beta else "N/A",
+                    "Maksuvalmius (Current Ratio)": round(current_ratio, 2) if current_ratio else "N/A",
+                    "Velka/Oma Pääoma (D/E)": round(debt_to_equity, 2) if debt_to_equity else "N/A",
                     "P/E-luku": round(pe_ratio, 2) if pe_ratio else "N/A"
                 })
                 
@@ -72,14 +73,41 @@ with tab1:
 
     with col_list:
         st.subheader("Oma Seurantalista")
-        st.write("Vertaile keräämiesi osakkeiden riskiprofiileja. (Z-score > 3 on vahva, Beta > 1 tarkoittaa kovaa heiluntaa).")
+        st.write("Vertaile osakkeiden riskiprofiileja. Vihreä = Turvallinen, Punainen = Kohonnut riski.")
         
         if len(st.session_state.watchlist) > 0:
-            # Luodaan taulukko
             df_watchlist = pd.DataFrame(st.session_state.watchlist)
-            # Poistetaan tuplakappaleet tikkerin perusteella
             df_watchlist = df_watchlist.drop_duplicates(subset=["Tikkeri"], keep="last").reset_index(drop=True)
-            st.dataframe(df_watchlist, use_container_width=True)
+            
+            # --- VÄRIKOODAUS (Pandas Styler) ---
+            def color_risk_metrics(val, col_name):
+                if pd.isna(val) or val == "N/A":
+                    return ""
+                try:
+                    v = float(val)
+                    if col_name == "Z-Score (Konkurssiriski)":
+                        if v > 2.6: return "color: #10b981; font-weight: bold;" # Vihreä
+                        elif v < 1.8: return "color: #ef4444; font-weight: bold;" # Punainen
+                    elif col_name == "Beta (Heilunta)":
+                        if v < 1.0: return "color: #10b981;"
+                        elif v > 1.2: return "color: #ef4444; font-weight: bold;"
+                    elif col_name == "Maksuvalmius (Current Ratio)":
+                        if v > 1.5: return "color: #10b981;"
+                        elif v < 1.0: return "color: #ef4444; font-weight: bold;"
+                    elif col_name == "Velka/Oma Pääoma (D/E)":
+                        if v < 100: return "color: #10b981;"
+                        elif v > 200: return "color: #ef4444; font-weight: bold;"
+                    return ""
+                except:
+                    return ""
+
+            # Sovelletaan värjäyssääntöjä taulukkoon
+            styled_df = df_watchlist.style.apply(
+                lambda col: [color_risk_metrics(v, col.name) for v in col], 
+                axis=0
+            )
+            
+            st.dataframe(styled_df, use_container_width=True)
             
             if st.button("Tyhjennä lista"):
                 st.session_state.watchlist = []
@@ -115,7 +143,6 @@ with tab2:
         osinko = st.slider("Osakkeiden osinkotuotto / v (%)", 0.0, 10.0, 3.0, step=0.5) / 100
         korko_saasto = st.slider("Säästötilin korko / v (%)", 0.0, 10.0, 3.0, step=0.5) / 100
         
-        # UUSI SÄÄDIN: Hallinnointikulut
         st.markdown("---")
         kulut = st.slider("Rahastojen hallinnointi- & kaupankäyntikulut / v (%)", 0.0, 3.0, 0.4, step=0.1) / 100
         st.caption("Esim. halpa indeksirahasto 0,2 %, perinteinen pankkirahasto 1,5 %.")
@@ -137,7 +164,6 @@ with tab2:
         else:
             st.success("Allokaatio 100 % – Valmis simuloitavaksi!")
             
-            # UUSI: Älykäs puskurivaroitus aloittelijoille
             if (osuus_sav + osuus_kay) < 10 and kk_saasto > 0:
                 st.warning("⚠️ **Huomio!** Käteispuskurisi (säästö- ja käyttötili) osuus uusista säästöistä on alle 10 %. Jos elämässä tulee yllättävä kulu (esim. auton hajoaminen), saatat joutua myymään osakkeita huonoon aikaan mahdollisella tappiolla.")
 
@@ -158,7 +184,6 @@ with tab2:
         vert_kay_bal = start_kay
         vert_kaikki_kay = start_aot + start_ost + start_sav + start_kay
         
-        # Seurataan maksettujen kulujen määrää
         maksetut_kulut_yhteensa = 0
         
         data = []
@@ -201,7 +226,6 @@ with tab2:
             tax_aot = (div_aot * 0.85) * 0.30
             bal_aot += (div_aot - tax_aot)
             bal_aot += (bal_aot * arvonnousu)
-            # Vähennetään sijoittamisen kulut
             kulu_aot = bal_aot * kulut
             bal_aot -= kulu_aot
             maksetut_kulut_yhteensa += kulu_aot
@@ -216,7 +240,6 @@ with tab2:
             bal_ost += talletus
             bal_ost += (bal_ost * osinko)
             bal_ost += (bal_ost * arvonnousu)
-            # Vähennetään sijoittamisen kulut
             kulu_ost = bal_ost * kulut
             bal_ost -= kulu_ost
             maksetut_kulut_yhteensa += kulu_ost
@@ -242,6 +265,5 @@ with tab2:
         col_res1.metric("Oma säästö yhteensä (Reaaliarvo)", f"{omat_rahat:,.0f} €".replace(",", " "))
         col_res2.metric("Salkun arvo lopussa (Reaaliarvo)", f"{loppuarvo:,.0f} €".replace(",", " "))
         
-        # Näytetään kulujen julma totuus
         maksetut_kulut_reaali = maksetut_kulut_yhteensa / ((1 + inflaatio) ** vuodet)
         col_res3.metric("Maksetut piilokulut (Reaaliarvo)", f"-{maksetut_kulut_reaali:,.0f} €".replace(",", " "))
