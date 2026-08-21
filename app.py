@@ -11,7 +11,6 @@ if 'watchlist' not in st.session_state:
 
 st.title("📈 Sijoittajan Työkalupakki")
 
-# Luodaan kaksi välilehteä sovellukseen
 tab1, tab2 = st.tabs(["📊 Osake-Screener & Riskilista", "💼 Yhdistelmäsalkun Simulaattori"])
 
 # ==========================================
@@ -21,7 +20,8 @@ with tab1:
     st.header("Osake-Screener & Riskilista")
     st.write("Analysoi yksittäisiä osakkeita ja kerää niistä itsellesi seurantalista oikealle.")
     
-    col_screener, col_list = st.columns([1, 1.8]) # Levennettiin oikeaa palstaa taulukolle
+    # Levennetään oikeaa palstaa vielä hieman, koska sarakkeita tuli lisää
+    col_screener, col_list = st.columns([1, 2.2]) 
     
     with col_screener:
         st.subheader("Hae osaketta")
@@ -32,7 +32,7 @@ with tab1:
                 stock = yf.Ticker(ticker)
                 info = stock.info
                 
-                # Yritetään hakea taseen luvut (Pomminkestävä versio)
+                # Taseen luvut Z-scorea varten
                 balance_sheet = stock.balance_sheet
                 if not balance_sheet.empty and 'Total Assets' in balance_sheet.index:
                     total_assets = balance_sheet.loc['Total Assets'].iloc[0]
@@ -49,21 +49,31 @@ with tab1:
                 else:
                     z_score = None 
                 
-                # Haetaan uudet riskimittarit ja tunnusluvut
+                # Haetaan tunnusluvut
                 beta = info.get('beta', None)
                 pe_ratio = info.get('forwardPE', None)
                 current_ratio = info.get('currentRatio', None)
                 debt_to_equity = info.get('debtToEquity', None)
                 
+                # Uudet pyytämäsi tunnusluvut
+                rev_growth = info.get('revenueGrowth', None)
+                profit_margin = info.get('profitMargins', None)
+                eps = info.get('trailingEps', None)
+                roe = info.get('returnOnEquity', None)
+                
                 # Lisätään osake välimuistin seurantalistalle
                 st.session_state.watchlist.append({
                     "Tikkeri": ticker,
                     "Nimi": info.get('shortName', ticker),
-                    "Z-Score (Konkurssiriski)": round(z_score, 2) if z_score else "N/A",
-                    "Beta (Heilunta)": round(beta, 2) if beta else "N/A",
-                    "Maksuvalmius (Current Ratio)": round(current_ratio, 2) if current_ratio else "N/A",
-                    "Velka/Oma Pääoma (D/E)": round(debt_to_equity, 2) if debt_to_equity else "N/A",
-                    "P/E-luku": round(pe_ratio, 2) if pe_ratio else "N/A"
+                    "Z-Score": round(z_score, 2) if z_score else "N/A",
+                    "Beta": round(beta, 2) if beta else "N/A",
+                    "Maksuvalmius": round(current_ratio, 2) if current_ratio else "N/A",
+                    "Velka/Oma Pääoma": round(debt_to_equity, 2) if debt_to_equity else "N/A",
+                    "P/E": round(pe_ratio, 2) if pe_ratio else "N/A",
+                    "Liikevaihdon kasvu (%)": round(rev_growth * 100, 2) if rev_growth else "N/A",
+                    "Voittomarginaali (%)": round(profit_margin * 100, 2) if profit_margin else "N/A",
+                    "ROE (%)": round(roe * 100, 2) if roe else "N/A",
+                    "EPS": round(eps, 2) if eps else "N/A"
                 })
                 
                 st.success(f"{ticker} analysoitu ja lisätty listalle!")
@@ -73,7 +83,7 @@ with tab1:
 
     with col_list:
         st.subheader("Oma Seurantalista")
-        st.write("Vertaile osakkeiden riskiprofiileja. Vihreä = Turvallinen, Punainen = Kohonnut riski.")
+        st.write("Vertaile osakkeiden riskiprofiileja. Vihreä = Vahva/Turvallinen, Punainen = Heikko/Riski.")
         
         if len(st.session_state.watchlist) > 0:
             df_watchlist = pd.DataFrame(st.session_state.watchlist)
@@ -85,33 +95,56 @@ with tab1:
                     return ""
                 try:
                     v = float(val)
-                    if col_name == "Z-Score (Konkurssiriski)":
-                        if v > 2.6: return "color: #10b981; font-weight: bold;" # Vihreä
-                        elif v < 1.8: return "color: #ef4444; font-weight: bold;" # Punainen
-                    elif col_name == "Beta (Heilunta)":
+                    if col_name == "Z-Score":
+                        if v > 2.6: return "color: #10b981; font-weight: bold;" 
+                        elif v < 1.8: return "color: #ef4444; font-weight: bold;" 
+                    elif col_name == "Beta":
                         if v < 1.0: return "color: #10b981;"
                         elif v > 1.2: return "color: #ef4444; font-weight: bold;"
-                    elif col_name == "Maksuvalmius (Current Ratio)":
+                    elif col_name == "Maksuvalmius":
                         if v > 1.5: return "color: #10b981;"
                         elif v < 1.0: return "color: #ef4444; font-weight: bold;"
-                    elif col_name == "Velka/Oma Pääoma (D/E)":
+                    elif col_name == "Velka/Oma Pääoma":
                         if v < 100: return "color: #10b981;"
                         elif v > 200: return "color: #ef4444; font-weight: bold;"
+                    elif col_name == "Liikevaihdon kasvu (%)":
+                        if v > 10.0: return "color: #10b981; font-weight: bold;"
+                        elif v < 0: return "color: #ef4444; font-weight: bold;"
+                    elif col_name == "Voittomarginaali (%)":
+                        if v > 15.0: return "color: #10b981; font-weight: bold;"
+                        elif v < 5.0: return "color: #ef4444; font-weight: bold;"
+                    elif col_name == "ROE (%)":
+                        if v > 15.0: return "color: #10b981; font-weight: bold;"
+                        elif v < 5.0: return "color: #ef4444; font-weight: bold;"
                     return ""
                 except:
                     return ""
 
-            # Sovelletaan värjäyssääntöjä taulukkoon
-            styled_df = df_watchlist.style.apply(
+            styled_df = df_watchlist.style.map(
+                lambda v: "", # Oletus, ei virhettä tyhjässä dataframe.style.map käyttöön 
+            ).apply(
                 lambda col: [color_risk_metrics(v, col.name) for v in col], 
                 axis=0
             )
             
             st.dataframe(styled_df, use_container_width=True)
             
-            if st.button("Tyhjennä lista"):
-                st.session_state.watchlist = []
-                st.rerun()
+            # --- YKSITTÄISEN OSAKKEEN POISTAMINEN ---
+            st.markdown("### Hallinnoi listaa")
+            col_del1, col_del2, col_del3 = st.columns([2, 1, 1])
+            
+            tickers_in_list = df_watchlist['Tikkeri'].tolist()
+            with col_del1:
+                del_ticker = st.selectbox("Valitse poistettava osake:", tickers_in_list, label_visibility="collapsed")
+            with col_del2:
+                if st.button("🗑️ Poista valittu"):
+                    # Suodatetaan listalta pois se osake, joka valittiin
+                    st.session_state.watchlist = [item for item in st.session_state.watchlist if item['Tikkeri'] != del_ticker]
+                    st.rerun()
+            with col_del3:
+                if st.button("Tyhjennä koko lista"):
+                    st.session_state.watchlist = []
+                    st.rerun()
         else:
             st.info("Listasi on tyhjä. Hae osakkeita vasemmalta lisätäksesi niitä tähän.")
 
