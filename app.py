@@ -11,7 +11,7 @@ if 'watchlist' not in st.session_state:
 
 st.title("📈 Sijoittajan Työkalupakki")
 
-tab1, tab2 = st.tabs(["📊 Osake-Screener & Riskilista", "💼 Yhdistelmäsalkun Simulaattori"])
+tab1, tab2, tab3 = st.tabs(["📊 Osake-Screener & Riskilista", "💼 Yhdistelmäsalkun Simulaattori", "🏡 Nettovarallisuus & Kassavirta"])
 
 # ==========================================
 # VÄLILEHTI 1: OSAKE-SCREENER & SEURANTALISTA
@@ -31,7 +31,6 @@ with tab1:
                 stock = yf.Ticker(ticker)
                 info = stock.info
                 
-                # Taseen luvut Z-scorea varten
                 balance_sheet = stock.balance_sheet
                 if not balance_sheet.empty and 'Total Assets' in balance_sheet.index:
                     total_assets = balance_sheet.loc['Total Assets'].iloc[0]
@@ -48,18 +47,15 @@ with tab1:
                 else:
                     z_score = None 
                 
-                # Haetaan tunnusluvut
                 beta = info.get('beta', None)
                 pe_ratio = info.get('forwardPE', None)
                 current_ratio = info.get('currentRatio', None)
                 debt_to_equity = info.get('debtToEquity', None)
-                
                 rev_growth = info.get('revenueGrowth', None)
                 profit_margin = info.get('profitMargins', None)
                 eps = info.get('trailingEps', None)
                 roe = info.get('returnOnEquity', None)
                 
-                # Lisätään osake listalle UUSILLA otsikoilla
                 st.session_state.watchlist.append({
                     "Tikkeri": ticker,
                     "Nimi": info.get('shortName', ticker),
@@ -81,16 +77,13 @@ with tab1:
 
     with col_list:
         st.subheader("Oma Seurantalista")
-        st.write("Vertaile osakkeiden riskiprofiileja. Vihreä = Vahva/Turvallinen, Punainen = Heikko/Riski.")
         
         if len(st.session_state.watchlist) > 0:
             df_watchlist = pd.DataFrame(st.session_state.watchlist)
             df_watchlist = df_watchlist.drop_duplicates(subset=["Tikkeri"], keep="last").reset_index(drop=True)
             
-            # --- VÄRIKOODAUS (Päivitetty uusiin otsikoihin) ---
             def color_risk_metrics(val, col_name):
-                if pd.isna(val) or val == "N/A":
-                    return ""
+                if pd.isna(val) or val == "N/A": return ""
                 try:
                     v = float(val)
                     if col_name == "Z-Score (Turva >2.6)":
@@ -115,19 +108,11 @@ with tab1:
                         if v > 15.0: return "color: #10b981; font-weight: bold;"
                         elif v < 5.0: return "color: #ef4444; font-weight: bold;"
                     return ""
-                except:
-                    return ""
+                except: return ""
 
-            styled_df = df_watchlist.style.map(
-                lambda v: "", 
-            ).apply(
-                lambda col: [color_risk_metrics(v, col.name) for v in col], 
-                axis=0
-            )
-            
+            styled_df = df_watchlist.style.map(lambda v: "").apply(lambda col: [color_risk_metrics(v, col.name) for v in col], axis=0)
             st.dataframe(styled_df, use_container_width=True)
             
-            # --- YKSITTÄISEN OSAKKEEN POISTAMINEN ---
             st.markdown("### Hallinnoi listaa")
             col_del1, col_del2, col_del3 = st.columns([2, 1, 1])
             
@@ -142,16 +127,16 @@ with tab1:
                 if st.button("Tyhjennä koko lista"):
                     st.session_state.watchlist = []
                     st.rerun()
-            st.markdown("---") # tämä on erotinviiva
-            st.markdown("### osakkeen hintakehitys (5 vuotta)")
-            valittu_tikkeri = st.selectbox("Valitse osake jonka kurssia haluat tarkastella;", tickers_in_list)
-            if valittu_tikkeri: #varmistetaan, että jokin osake on valittuna
+                    
+            st.markdown("---")
+            st.markdown("### 📊 Osakkeen hintakehitys (1 vuosi)")
+            
+            valittu_tikkeri = st.selectbox("Valitse osake, jonka kurssia haluat tarkastella:", tickers_in_list)
+            
+            if valittu_tikkeri:
                 try:
-                    #haetaan osakkeen tiedot:
                     graafi_stock = yf.Ticker(valittu_tikkeri)
-                    # stock.history() hakee kurssidatan. valittu _v hakee sen verran vuosia, joka numero on laitettu
-                    historia = graafi_stock.history(period="5y")
-                    # historiataulukossa on paljon sarakkeita kuten open ja close, valitaan vaan close:
+                    historia = graafi_stock.history(period="1y")
                     st.line_chart(historia['Close'])
                 except Exception as e:
                     st.warning("Kurssidataa ei saatu ladattua.")
@@ -188,7 +173,6 @@ with tab2:
         
         st.markdown("---")
         kulut = st.slider("Rahastojen hallinnointi- & kaupankäyntikulut / v (%)", 0.0, 3.0, 0.4, step=0.1) / 100
-        st.caption("Esim. halpa indeksirahasto 0,2 %, perinteinen pankkirahasto 1,5 %.")
 
     with col_tuleva:
         st.subheader("3. Tulevat säästöt & Allokaatio")
@@ -208,11 +192,9 @@ with tab2:
             st.success("Allokaatio 100 % – Valmis simuloitavaksi!")
             
             if (osuus_sav + osuus_kay) < 10 and kk_saasto > 0:
-                st.warning("⚠️ **Huomio!** Käteispuskurisi (säästö- ja käyttötili) osuus uusista säästöistä on alle 10 %. Jos elämässä tulee yllättävä kulu (esim. auton hajoaminen), saatat joutua myymään osakkeita huonoon aikaan mahdollisella tappiolla.")
+                st.warning("⚠️ **Huomio!** Käteispuskurisi on alle 10 % uusista säästöistä.")
 
-    # Lasketaan vain, jos prosentit menevät oikein
     if yhteensa == 100:
-        
         bal_aot = start_aot
         bal_ost = start_ost
         bal_sav = start_sav
@@ -228,52 +210,39 @@ with tab2:
         vert_kaikki_kay = start_aot + start_ost + start_sav + start_kay
         
         maksetut_kulut_yhteensa = 0
-        
         data = []
         
         for i in range(vuodet + 1):
             discount = (1 + inflaatio) ** i
-            
             salkun_arvo = bal_aot + bal_ost + bal_sav + bal_kay
-            skenaario_saasto = vert_sav_bal + vert_kay_bal
-            skenaario_kaytto = vert_kaikki_kay
             
             data.append({
                 "Vuosi": str(i), 
                 "Yhdistelmäsalkku (€)": salkun_arvo / discount,
-                "Jos sijoitukset säästötilillä (€)": skenaario_saasto / discount,
-                "Jos kaikki käyttötilillä (€)": skenaario_kaytto / discount,
+                "Jos sijoitukset säästötilillä (€)": (vert_sav_bal + vert_kay_bal) / discount,
+                "Jos kaikki käyttötilillä (€)": vert_kaikki_kay / discount,
                 "Sijoitettu Pääoma (€)": sijoitettu_oma_raha / discount
             })
             
-            if i == vuodet:
-                break
+            if i == vuodet: break
                 
             vuosisäästö = kk_saasto * 12
             sijoitettu_oma_raha += vuosisäästö
             
-            in_aot = vuosisäästö * (osuus_aot / 100)
-            in_ost = vuosisäästö * (osuus_ost / 100)
-            in_sav = vuosisäästö * (osuus_sav / 100)
-            in_kay = vuosisäästö * (osuus_kay / 100)
+            bal_kay += vuosisäästö * (osuus_kay / 100)
             
-            # KASVU: Varsinainen salkku
-            bal_kay += in_kay
-            
-            bal_sav += in_sav
+            bal_sav += vuosisäästö * (osuus_sav / 100)
             bal_sav += (bal_sav * korko_saasto) * 0.70
             
-            # AOT
-            bal_aot += in_aot
+            bal_aot += vuosisäästö * (osuus_aot / 100)
             div_aot = bal_aot * osinko
-            tax_aot = (div_aot * 0.85) * 0.30
-            bal_aot += (div_aot - tax_aot)
+            bal_aot += (div_aot - ((div_aot * 0.85) * 0.30))
             bal_aot += (bal_aot * arvonnousu)
             kulu_aot = bal_aot * kulut
             bal_aot -= kulu_aot
             maksetut_kulut_yhteensa += kulu_aot
             
-            # OST
+            in_ost = vuosisäästö * (osuus_ost / 100)
             talletus = 0
             if deposited_ost < 100000:
                 talletus = min(in_ost, 100000 - deposited_ost)
@@ -287,26 +256,119 @@ with tab2:
             bal_ost -= kulu_ost
             maksetut_kulut_yhteensa += kulu_ost
             
-            # KASVU: Vertailuskenaariot
-            vert_kay_bal += in_kay
-            vert_sav_bal += (in_aot + in_ost + in_sav)
+            vert_kay_bal += vuosisäästö * (osuus_kay / 100)
+            vert_sav_bal += vuosisäästö * ((osuus_aot + osuus_ost + osuus_sav) / 100)
             vert_sav_bal += (vert_sav_bal * korko_saasto) * 0.70
-            
             vert_kaikki_kay += vuosisäästö
 
-        columns_order = ["Yhdistelmäsalkku (€)", "Jos sijoitukset säästötilillä (€)", "Jos kaikki käyttötilillä (€)", "Sijoitettu Pääoma (€)"]
-        df = pd.DataFrame(data).set_index("Vuosi")[columns_order]
+        df = pd.DataFrame(data).set_index("Vuosi")[["Yhdistelmäsalkku (€)", "Jos sijoitukset säästötilillä (€)", "Jos kaikki käyttötilillä (€)", "Sijoitettu Pääoma (€)"]]
         
         st.write("---")
-        st.subheader("Varallisuuden kehitys reaaliarvona (Inflaatiokorjattu ostovoima)")
+        st.subheader("Varallisuuden kehitys reaaliarvona")
         st.line_chart(df, color=["#10b981", "#f97316", "#ef4444", "#94a3b8"])
         
-        loppuarvo = data[-1]["Yhdistelmäsalkku (€)"]
-        omat_rahat = data[-1]["Sijoitettu Pääoma (€)"]
-        
         col_res1, col_res2, col_res3 = st.columns(3)
-        col_res1.metric("Oma säästö yhteensä (Reaaliarvo)", f"{omat_rahat:,.0f} €".replace(",", " "))
-        col_res2.metric("Salkun arvo lopussa (Reaaliarvo)", f"{loppuarvo:,.0f} €".replace(",", " "))
+        col_res1.metric("Oma säästö (Reaaliarvo)", f'{data[-1]["Sijoitettu Pääoma (€)"]:,.0f} €'.replace(",", " "))
+        col_res2.metric("Salkun arvo lopussa", f'{data[-1]["Yhdistelmäsalkku (€)"]:,.0f} €'.replace(",", " "))
+        col_res3.metric("Maksetut piilokulut", f'-{maksetut_kulut_yhteensa / ((1 + inflaatio) ** vuodet):,.0f} €'.replace(",", " "))
+
+
+# ==========================================
+# VÄLILEHTI 3: NETTOVARALLISUUS & KASSAVIRTA
+# ==========================================
+with tab3:
+    st.header("🏡 Kokonaisvaltainen Talouden Simulaattori")
+    st.write("Miten asuntolaina, autolaina ja elämisen kulut vaikuttavat kykyysi vaurastua? Tämä työkalu laskee nettovarallisuutesi (Varat miinus Velat) kehityksen 20 vuoden aikana.")
+    
+    col_kassa, col_asunto, col_auto = st.columns(3)
+    
+    with col_kassa:
+        st.subheader("Kassavirta & Sijoitukset")
+        tulot = st.number_input("Nettotulot yhteensä (€ / kk)", min_value=0, value=3000, step=100)
+        elinkulut = st.number_input("Muut elinkulut (ruoka, laskut, huvit) (€ / kk)", min_value=0, value=1200, step=50)
         
-        maksetut_kulut_reaali = maksetut_kulut_yhteensa / ((1 + inflaatio) ** vuodet)
-        col_res3.metric("Maksetut piilokulut (Reaaliarvo)", f"-{maksetut_kulut_reaali:,.0f} €".replace(",", " "))
+        st.markdown("---")
+        # MUUTOS ALKAA: Luetaan tiedot suoraan sivulta 2!
+        sijoitukset_alku = start_aot + start_ost + start_sav
+        salkun_kokonaistuotto = arvonnousu + osinko
+        
+        st.metric("Nykyiset sijoitukset (Haettu automaattisesti sivulta 2)", f"{sijoitukset_alku:,.0f} €".replace(",", " "))
+        st.metric("Salkun tuotto-oletus (Haettu automaattisesti sivulta 2)", f"{salkun_kokonaistuotto * 100:.1f} %")
+        st.caption("Kaikki yli jäävä raha (Tulot - Menot - Lainat) ohjataan automaattisesti tähän salkkuun kasvamaan korkoa.")
+
+    with col_asunto:
+        st.subheader("Omistusasunto")
+        asunto_arvo_alku = st.number_input("Asunnon nykyarvo (€)", min_value=0, value=200000, step=5000)
+        asuntolaina_alku = st.number_input("Asuntolainaa jäljellä (€)", min_value=0, value=150000, step=5000)
+        as_lyhennys = st.number_input("Lainan lyhennys (€ / kk)", min_value=0, value=500, step=50)
+        as_korko = st.slider("Asuntolainan korko (%)", 0.0, 10.0, 3.5, step=0.1)
+        vastike = st.number_input("Hoitovastike / Kiinteistövero (€ / kk)", min_value=0, value=250, step=10)
+
+    with col_auto:
+        st.subheader("Auto")
+        auto_arvo_alku = st.number_input("Auton nykyarvo (€)", min_value=0, value=25000, step=1000)
+        autolaina_alku = st.number_input("Autolainaa jäljellä (€)", min_value=0, value=20000, step=1000)
+        auto_lyhennys = st.number_input("Autolainan lyhennys (€ / kk)", min_value=0, value=300, step=50)
+        auto_korko = st.slider("Autolainan korko (%)", 0.0, 15.0, 6.0, step=0.1)
+        autokulut = st.number_input("Auton kulut (vakuutus, bensa, huollot) (€ / kk)", min_value=0, value=200, step=10)
+
+    # --- SIMULAATIO 20 VUODELLE ---
+    asunto_arvo = asunto_arvo_alku
+    asuntolaina = asuntolaina_alku
+    auto_arvo = auto_arvo_alku
+    autolaina = autolaina_alku
+    salkku = sijoitukset_alku
+    
+    maksetut_korot_yht = 0
+    nw_data = []
+    
+    for vuosi in range(21):
+        kokonaisvelka = asuntolaina + autolaina
+        omaisuus = asunto_arvo + auto_arvo + salkku
+        nettovarallisuus = omaisuus - kokonaisvelka
+        
+        nw_data.append({
+            "Vuosi": str(vuosi),
+            "Nettovarallisuus (€)": nettovarallisuus,
+            "Sijoitukset (€)": salkku,
+            "Velat yhteensä (€)": -kokonaisvelka 
+        })
+        
+        if vuosi == 20: break
+            
+        for kk in range(12):
+            kk_as_korko = asuntolaina * (as_korko / 100 / 12)
+            kk_auto_korko = autolaina * (auto_korko / 100 / 12)
+            maksetut_korot_yht += (kk_as_korko + kk_auto_korko)
+            
+            todellinen_as_lyhennys = min(asuntolaina, as_lyhennys)
+            todellinen_auto_lyhennys = min(autolaina, auto_lyhennys)
+            
+            menot = elinkulut + vastike + autokulut + kk_as_korko + kk_auto_korko + todellinen_as_lyhennys + todellinen_auto_lyhennys
+            jaannos = tulot - menot
+            
+            asuntolaina -= todellinen_as_lyhennys
+            autolaina -= todellinen_auto_lyhennys
+            
+            salkku += jaannos
+            if salkku > 0:
+                salkku *= (1 + (salkun_kokonaistuotto / 12)) 
+                
+        asunto_arvo *= 1.01  
+        auto_arvo *= 0.90    
+
+    st.write("---")
+    st.subheader("Nettovarallisuutesi Kehitys")
+    
+    df_nw = pd.DataFrame(nw_data).set_index("Vuosi")
+    st.line_chart(df_nw, color=["#10b981", "#3b82f6", "#ef4444"])
+    
+    st.markdown("### 20 Vuoden Yhteenveto")
+    res1, res2, res3 = st.columns(3)
+    
+    res1.metric("Nettovarallisuus 20v päästä", f"{nw_data[-1]['Nettovarallisuus (€)']:,.0f} €".replace(",", " "))
+    res2.metric("Sijoitusten arvo lopussa", f"{nw_data[-1]['Sijoitukset (€)']:,.0f} €".replace(",", " "))
+    res3.metric("Pankille maksetut lainakorot", f"-{maksetut_korot_yht:,.0f} €".replace(",", " "))
+    
+    if nw_data[-1]['Nettovarallisuus (€)'] < nw_data[0]['Nettovarallisuus (€)']:
+        st.error("🚨 **Varoitus:** Nettovarallisuutesi pienenee! Menosi ja autolainan korot syövät enemmän rahaa kuin sijoituksesi ehtivät tuottaa. Harkitse auton vaihtoa halvempaan tai menojen karsimista.")
