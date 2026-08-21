@@ -142,6 +142,19 @@ with tab1:
                 if st.button("Tyhjennä koko lista"):
                     st.session_state.watchlist = []
                     st.rerun()
+            st.markdown("---") # tämä on erotinviiva
+            st.markdown("### osakkeen hintakehitys (5 vuotta)")
+            valittu_tikkeri = st.selectbox("Valitse osake jonka kurssia haluat tarkastella;", tickers_in_list)
+            if valittu_tikkeri: #varmistetaan, että jokin osake on valittuna
+                try:
+                    #haetaan osakkeen tiedot:
+                    graafi_stock = yf.Ticker(valittu_tikkeri)
+                    # stock.history() hakee kurssidatan. valittu _v hakee sen verran vuosia, joka numero on laitettu
+                    historia = graafi_stock.history(period="5y")
+                    # historiataulukossa on paljon sarakkeita kuten open ja close, valitaan vaan close:
+                    st.line_chart(historia['Close])
+                                  except Exception as e:
+                                      st.warning("Kurssidataa ei saatu ladattua.")
         else:
             st.info("Listasi on tyhjä. Hae osakkeita vasemmalta lisätäksesi niitä tähän.")
 
