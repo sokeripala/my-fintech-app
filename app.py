@@ -152,7 +152,7 @@ with tab1:
                     # stock.history() hakee kurssidatan. valittu _v hakee sen verran vuosia, joka numero on laitettu
                     historia = graafi_stock.history(period="5y")
                     # historiataulukossa on paljon sarakkeita kuten open ja close, valitaan vaan close:
-                    st.line_chart(historia['Close])
+                    st.line_chart(historia['Close'])
                                   except Exception as e:
                                       st.warning("Kurssidataa ei saatu ladattua.")
         else:
