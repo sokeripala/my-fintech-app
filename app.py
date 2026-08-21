@@ -153,8 +153,8 @@ with tab1:
                     historia = graafi_stock.history(period="5y")
                     # historiataulukossa on paljon sarakkeita kuten open ja close, valitaan vaan close:
                     st.line_chart(historia['Close'])
-                                  except Exception as e:
-                                      st.warning("Kurssidataa ei saatu ladattua.")
+                except Exception as e:
+                    st.warning("Kurssidataa ei saatu ladattua.")
         else:
             st.info("Listasi on tyhjä. Hae osakkeita vasemmalta lisätäksesi niitä tähän.")
 
