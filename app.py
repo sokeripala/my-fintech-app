@@ -133,7 +133,7 @@ with tab1:
                     st.rerun()
                     
             st.markdown("---")
-            st.markdown("### 📊 Osakkeen hintakehitys (1 vuosi)")
+            st.markdown("### 📊 Yksittäisen osakkeen hintakehitys (1 vuosi)")
             valittu_tikkeri = st.selectbox("Valitse osake, jonka kurssia haluat tarkastella:", tickers_in_list)
             if valittu_tikkeri:
                 try:
@@ -142,6 +142,48 @@ with tab1:
                     st.line_chart(historia['Close'])
                 except Exception as e:
                     st.warning("Kurssidataa ei saatu ladattua.")
+
+            # --- UUSI OMINAISUUS: Salkun yhteistuotto ---
+            st.markdown("---")
+            st.markdown("### 📈 Seurantalistan yhteinen historiallinen tuotto (1 vuosi)")
+            st.write("Tämä graafi simuloi tasapainotettua salkkua, jossa jokaiseen listan osakkeeseen on sijoitettu yhtä paljon. Arvo on skaalattu alkamaan 100:sta.")
+            
+            if len(tickers_in_list) > 0:
+                portfolio_df = pd.DataFrame()
+                with st.spinner("Lasketaan salkun tuottoa..."):
+                    for t in tickers_in_list:
+                        try:
+                            hist = yf.Ticker(t).history(period="1y")
+                            if not hist.empty:
+                                portfolio_df[t] = hist['Close']
+                        except:
+                            pass
+                    
+                    if not portfolio_df.empty:
+                        # Täytetään mahdolliset puuttuvat päivät (esim. pyhäpäivät eri pörsseissä) edellisellä arvolla
+                        portfolio_df = portfolio_df.ffill().dropna() 
+                        # Normalisoidaan kaikki osakkeet alkamaan sadasta (100)
+                        portfolio_norm = (portfolio_df / portfolio_df.iloc[0]) * 100
+                        # Lasketaan päivittäinen keskiarvo kaikista osakkeista
+                        salkku_yhteensa = portfolio_norm.mean(axis=1)
+                        
+                        st.line_chart(salkku_yhteensa, color="#10b981") # Vihreä väri
+                    else:
+                        st.warning("Hintadataa ei saatu laskentaa varten.")
+
+            # --- UUSI OMINAISUUS: Vertailuindeksi S&P 500 ---
+            st.markdown("---")
+            st.markdown("### 🌍 Vertailuindeksi: S&P 500 (1 vuosi)")
+            st.write("Yhdysvaltain 500 suurimman yrityksen markkina-arvopainotettu indeksi (skaalattu alkamaan 100:sta vertailun helpottamiseksi).")
+            
+            try:
+                sp500_hist = yf.Ticker("^GSPC").history(period="1y")
+                if not sp500_hist.empty:
+                    sp500_norm = (sp500_hist['Close'] / sp500_hist['Close'].iloc[0]) * 100
+                    st.line_chart(sp500_norm, color="#3b82f6") # Sininen väri
+            except:
+                st.warning("Indeksin datan haku epäonnistui.")
+
         else:
             st.info("Listasi on tyhjä. Hae osakkeita vasemmalta lisätäksesi niitä tähän.")
 
