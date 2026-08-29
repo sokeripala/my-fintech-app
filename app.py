@@ -143,14 +143,15 @@ with tab1:
                 except Exception as e:
                     st.warning("Kurssidataa ei saatu ladattua.")
 
-            # --- UUSI OMINAISUUS: Salkun yhteistuotto ---
+            # --- UUSI OMINAISUUS: Yhdistetty Salkku vs S&P 500 Graafi ---
             st.markdown("---")
-            st.markdown("### 📈 Seurantalistan yhteinen historiallinen tuotto (1 vuosi)")
-            st.write("Tämä graafi simuloi tasapainotettua salkkua, jossa jokaiseen listan osakkeeseen on sijoitettu yhtä paljon. Arvo on skaalattu alkamaan 100:sta.")
+            st.markdown("### 📈 Oma Seurantalista vs. S&P 500 (1 vuosi)")
+            st.write("Vertaa tasapainotettua salkkua (jossa jokaiseen listan osakkeeseen on sijoitettu yhtä paljon) yleiseen markkinakehitykseen. Arvot skaalattu alkamaan 100:sta.")
             
             if len(tickers_in_list) > 0:
                 portfolio_df = pd.DataFrame()
-                with st.spinner("Lasketaan salkun tuottoa..."):
+                with st.spinner("Lasketaan tuottoja ja haetaan vertailuindeksiä..."):
+                    # 1. Haetaan omat osakkeet
                     for t in tickers_in_list:
                         try:
                             hist = yf.Ticker(t).history(period="1y")
@@ -160,29 +161,29 @@ with tab1:
                             pass
                     
                     if not portfolio_df.empty:
-                        # Täytetään mahdolliset puuttuvat päivät (esim. pyhäpäivät eri pörsseissä) edellisellä arvolla
                         portfolio_df = portfolio_df.ffill().dropna() 
-                        # Normalisoidaan kaikki osakkeet alkamaan sadasta (100)
                         portfolio_norm = (portfolio_df / portfolio_df.iloc[0]) * 100
-                        # Lasketaan päivittäinen keskiarvo kaikista osakkeista
-                        salkku_yhteensa = portfolio_norm.mean(axis=1)
                         
-                        st.line_chart(salkku_yhteensa, color="#10b981") # Vihreä väri
+                        salkku_yhteensa = portfolio_norm.mean(axis=1)
+                        salkku_yhteensa.name = "Oma Salkku"
+                        
+                        # 2. Haetaan S&P 500 indeksi vertailuksi
+                        try:
+                            sp500_hist = yf.Ticker("^GSPC").history(period="1y")
+                            if not sp500_hist.empty:
+                                sp500_norm = (sp500_hist['Close'] / sp500_hist['Close'].iloc[0]) * 100
+                                sp500_norm.name = "S&P 500"
+                                
+                                # Yhdistetään taulukot yhteen graafia varten
+                                combined_df = pd.concat([salkku_yhteensa, sp500_norm], axis=1).ffill().dropna()
+                                st.line_chart(combined_df, color=["#10b981", "#3b82f6"]) # Vihreä salkulle, Sininen S&P500:lle
+                            else:
+                                st.line_chart(salkku_yhteensa, color="#10b981")
+                        except:
+                            st.warning("Indeksin datan haku epäonnistui. Näytetään vain oma salkku.")
+                            st.line_chart(salkku_yhteensa, color="#10b981")
                     else:
                         st.warning("Hintadataa ei saatu laskentaa varten.")
-
-            # --- UUSI OMINAISUUS: Vertailuindeksi S&P 500 ---
-            st.markdown("---")
-            st.markdown("### 🌍 Vertailuindeksi: S&P 500 (1 vuosi)")
-            st.write("Yhdysvaltain 500 suurimman yrityksen markkina-arvopainotettu indeksi (skaalattu alkamaan 100:sta vertailun helpottamiseksi).")
-            
-            try:
-                sp500_hist = yf.Ticker("^GSPC").history(period="1y")
-                if not sp500_hist.empty:
-                    sp500_norm = (sp500_hist['Close'] / sp500_hist['Close'].iloc[0]) * 100
-                    st.line_chart(sp500_norm, color="#3b82f6") # Sininen väri
-            except:
-                st.warning("Indeksin datan haku epäonnistui.")
 
         else:
             st.info("Listasi on tyhjä. Hae osakkeita vasemmalta lisätäksesi niitä tähän.")
