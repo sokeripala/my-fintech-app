@@ -86,7 +86,10 @@ with tab1:
         
         if len(st.session_state.watchlist) > 0:
             df_watchlist = pd.DataFrame(st.session_state.watchlist)
-            df_watchlist = df_watchlist.drop_duplicates(subset=["Tikkeri"], keep="last").reset_index(drop=True)
+            df_watchlist = df_watchlist.drop_duplicates(subset=["Tikkeri"], keep="last")
+            
+            # --- UUSI OMINAISUUS: Asetetaan osakkeen Nimi indeksiksi jotta se lukittuu vasemmalle ---
+            df_watchlist = df_watchlist.set_index("Nimi")
             
             def color_risk_metrics(val, col_name):
                 if pd.isna(val) or val == "N/A": return ""
@@ -195,9 +198,12 @@ with tab2:
     with col_nyk:
         st.subheader("1. Nykyinen varallisuus")
         start_aot = st.number_input("Arvo-osuustilin nykyarvo (€)", min_value=0, value=10000, step=1000)
-        aot_voitto_pct = st.slider("Josta voittoa AOT:lla (%)", 0, 100, 10)
+        
+        # --- UUSI OMINAISUUS: Voittoprosentin maksimi nostettu 100 -> 1000 ---
+        aot_voitto_pct = st.slider("Josta voittoa AOT:lla (%)", 0, 1000, 10)
         start_ost = st.number_input("Osakesäästötilin nykyarvo (€)", min_value=0, value=0, step=1000)
-        ost_voitto_pct = st.slider("Josta voittoa OST:lla (%)", 0, 100, 0)
+        ost_voitto_pct = st.slider("Josta voittoa OST:lla (%)", 0, 1000, 0)
+        
         start_sav = st.number_input("Säästötilin saldo (€)", min_value=0, value=5000, step=1000)
         start_kay = st.number_input("Käyttötilin saldo (Likvidi raha) (€)", min_value=0, value=2000, step=500)
         
@@ -214,7 +220,6 @@ with tab2:
         st.subheader("3. Tulevat säästöt & Allokaatio")
         kk_saasto = st.number_input("Nykyinen kuukausisäästö yhteensä (€)", min_value=0, max_value=10000, value=300, step=50)
         
-        # --- UUSI OMINAISUUS: Säästösumman dynaaminen muuttaminen ---
         st.markdown("**Säästösumman muutokset tulevaisuudessa**")
         col_m1, col_m2, col_m3 = st.columns([1,1,1])
         with col_m1:
@@ -222,7 +227,7 @@ with tab2:
         with col_m2:
             m_summa = st.number_input("Uusi säästö (€/kk)", min_value=0, value=500, step=50)
         with col_m3:
-            st.write("") # Tyhjä rivi tasaamaan napin korkeus
+            st.write("") 
             if st.button("➕ Lisää muutos"):
                 st.session_state.savings_changes.append({"Vuosi": m_vuosi, "Uusi säästö (€/kk)": m_summa})
                 st.rerun()
@@ -268,7 +273,6 @@ with tab2:
         maksetut_kulut_yhteensa = 0
         data = []
         
-        # Alustetaan nykyinen säästösumma ja tehdään sanakirja helpompaa hakua varten
         current_kk_saasto = kk_saasto
         muutokset_dict = {m["Vuosi"]: m["Uusi säästö (€/kk)"] for m in st.session_state.savings_changes}
         
@@ -286,7 +290,6 @@ with tab2:
             
             if i == vuodet_salkku: break
                 
-            # Tarkistetaan vaihtuuko säästösumma alkavalle vuodelle
             if (i + 1) in muutokset_dict:
                 current_kk_saasto = muutokset_dict[i + 1]
                 
