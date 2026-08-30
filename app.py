@@ -6,9 +6,11 @@ import altair as alt
 # Sivun perusasetukset
 st.set_page_config(page_title="Sijoittajan Työkalupakki", layout="wide")
 
-# Alustetaan välimuisti seurantalistaa varten
+# Alustetaan välimuistit
 if 'watchlist' not in st.session_state:
     st.session_state.watchlist = []
+if 'savings_changes' not in st.session_state:
+    st.session_state.savings_changes = []
 
 st.title("📈 Sijoittajan Työkalupakki")
 
@@ -143,15 +145,13 @@ with tab1:
                 except Exception as e:
                     st.warning("Kurssidataa ei saatu ladattua.")
 
-            # --- UUSI OMINAISUUS: Yhdistetty Salkku vs S&P 500 Graafi ---
             st.markdown("---")
             st.markdown("### 📈 Oma Seurantalista vs. S&P 500 (1 vuosi)")
-            st.write("Vertaa tasapainotettua salkkua (jossa jokaiseen listan osakkeeseen on sijoitettu yhtä paljon) yleiseen markkinakehitykseen. Arvot skaalattu alkamaan 100:sta.")
+            st.write("Vertaa tasapainotettua salkkua yleiseen markkinakehitykseen. Arvot skaalattu alkamaan 100:sta.")
             
             if len(tickers_in_list) > 0:
                 portfolio_df = pd.DataFrame()
                 with st.spinner("Lasketaan tuottoja ja haetaan vertailuindeksiä..."):
-                    # 1. Haetaan omat osakkeet
                     for t in tickers_in_list:
                         try:
                             hist = yf.Ticker(t).history(period="1y")
@@ -163,20 +163,16 @@ with tab1:
                     if not portfolio_df.empty:
                         portfolio_df = portfolio_df.ffill().dropna() 
                         portfolio_norm = (portfolio_df / portfolio_df.iloc[0]) * 100
-                        
                         salkku_yhteensa = portfolio_norm.mean(axis=1)
                         salkku_yhteensa.name = "Oma Salkku"
                         
-                        # 2. Haetaan S&P 500 indeksi vertailuksi
                         try:
                             sp500_hist = yf.Ticker("^GSPC").history(period="1y")
                             if not sp500_hist.empty:
                                 sp500_norm = (sp500_hist['Close'] / sp500_hist['Close'].iloc[0]) * 100
                                 sp500_norm.name = "S&P 500"
-                                
-                                # Yhdistetään taulukot yhteen graafia varten
                                 combined_df = pd.concat([salkku_yhteensa, sp500_norm], axis=1).ffill().dropna()
-                                st.line_chart(combined_df, color=["#10b981", "#3b82f6"]) # Vihreä salkulle, Sininen S&P500:lle
+                                st.line_chart(combined_df, color=["#10b981", "#3b82f6"]) 
                             else:
                                 st.line_chart(salkku_yhteensa, color="#10b981")
                         except:
@@ -184,7 +180,6 @@ with tab1:
                             st.line_chart(salkku_yhteensa, color="#10b981")
                     else:
                         st.warning("Hintadataa ei saatu laskentaa varten.")
-
         else:
             st.info("Listasi on tyhjä. Hae osakkeita vasemmalta lisätäksesi niitä tähän.")
 
@@ -217,8 +212,29 @@ with tab2:
 
     with col_tuleva:
         st.subheader("3. Tulevat säästöt & Allokaatio")
-        kk_saasto = st.number_input("Uusi kuukausisäästö yhteensä (€)", min_value=0, max_value=10000, value=300, step=50)
+        kk_saasto = st.number_input("Nykyinen kuukausisäästö yhteensä (€)", min_value=0, max_value=10000, value=300, step=50)
         
+        # --- UUSI OMINAISUUS: Säästösumman dynaaminen muuttaminen ---
+        st.markdown("**Säästösumman muutokset tulevaisuudessa**")
+        col_m1, col_m2, col_m3 = st.columns([1,1,1])
+        with col_m1:
+            m_vuosi = st.number_input("Muutosvuosi", min_value=1, max_value=vuodet_salkku, value=5)
+        with col_m2:
+            m_summa = st.number_input("Uusi säästö (€/kk)", min_value=0, value=500, step=50)
+        with col_m3:
+            st.write("") # Tyhjä rivi tasaamaan napin korkeus
+            if st.button("➕ Lisää muutos"):
+                st.session_state.savings_changes.append({"Vuosi": m_vuosi, "Uusi säästö (€/kk)": m_summa})
+                st.rerun()
+                
+        if len(st.session_state.savings_changes) > 0:
+            df_muutokset = pd.DataFrame(st.session_state.savings_changes).sort_values("Vuosi").reset_index(drop=True)
+            st.dataframe(df_muutokset, use_container_width=True)
+            if st.button("Tyhjennä muutokset"):
+                st.session_state.savings_changes = []
+                st.rerun()
+        
+        st.write("---")
         st.write("Mihin uudet säästöt jaetaan? (Summan pitää olla 100 %)")
         osuus_aot = st.number_input("AOT Osuus (%)", min_value=0, max_value=100, value=40)
         osuus_ost = st.number_input("OST Osuus (%)", min_value=0, max_value=100, value=40)
@@ -252,6 +268,10 @@ with tab2:
         maksetut_kulut_yhteensa = 0
         data = []
         
+        # Alustetaan nykyinen säästösumma ja tehdään sanakirja helpompaa hakua varten
+        current_kk_saasto = kk_saasto
+        muutokset_dict = {m["Vuosi"]: m["Uusi säästö (€/kk)"] for m in st.session_state.savings_changes}
+        
         for i in range(vuodet_salkku + 1):
             discount = (1 + inflaatio) ** i
             salkun_arvo = bal_aot + bal_ost + bal_sav + bal_kay
@@ -266,7 +286,11 @@ with tab2:
             
             if i == vuodet_salkku: break
                 
-            vuosisäästö = kk_saasto * 12
+            # Tarkistetaan vaihtuuko säästösumma alkavalle vuodelle
+            if (i + 1) in muutokset_dict:
+                current_kk_saasto = muutokset_dict[i + 1]
+                
+            vuosisäästö = current_kk_saasto * 12
             sijoitettu_oma_raha += vuosisäästö
             
             bal_kay += vuosisäästö * (osuus_kay / 100)
@@ -366,15 +390,12 @@ with tab3:
     autolaina = autolaina_alku
     salkku = sijoitukset_alku
     
-    # Laske asuntolainan kuukausilyhennys (tasalyhennys)
     as_lyhennys = (asuntolaina_maara / (as_maksuaika * 12)) if as_maksuaika > 0 else 0
     
     maksetut_korot_yht = 0
     nw_data = []
     
     for vuosi in range(sim_vuodet + 1):
-        
-        # Oston hetki: asunnon arvo ilmestyy, laina astuu voimaan ja salkusta vähennetään käsiraha
         if vuosi == osto_vuosi:
             asunto_arvo = asunto_hinta
             asuntolaina = asuntolaina_maara
@@ -402,7 +423,6 @@ with tab3:
             
             asumiskulu = 0
             if vuosi >= osto_vuosi:
-                # Maksetaan asuntolainaa ja vastiketta
                 kk_as_korko = asuntolaina * (as_korko / 100 / 12)
                 todellinen_as_lyhennys = min(asuntolaina, as_lyhennys)
                 asuntolaina -= todellinen_as_lyhennys
@@ -410,7 +430,6 @@ with tab3:
                 
                 asumiskulu = vastike + kk_as_korko + todellinen_as_lyhennys
             else:
-                # Asutaan vielä vuokralla
                 asumiskulu = vuokra
             
             menot = elinkulut + asumiskulu + autokulut + kk_auto_korko + todellinen_auto_lyhennys
@@ -420,7 +439,6 @@ with tab3:
             if salkku > 0:
                 salkku *= (1 + (salkun_kokonaistuotto / 12)) 
                 
-        # Vuosittainen arvonnousu ja -lasku
         if vuosi >= osto_vuosi:
             asunto_arvo *= 1.01  
         auto_arvo *= 0.90    
@@ -446,7 +464,6 @@ with tab4:
 
     col_pie1, col_pie2 = st.columns(2)
     
-    # Nykytilanteen määritys osto_vuoden perusteella
     nykyinen_asunto_arvo = asunto_hinta if osto_vuosi == 0 else 0
     nykyinen_asuntolaina = asuntolaina_maara if osto_vuosi == 0 else 0
     
@@ -488,7 +505,6 @@ with tab4:
     
     st.subheader("Menojesi jakautuminen (Kuukaudessa - Nykytilanne)")
     
-    # Selvitetään ensimmäisen kuukauden todelliset menot
     eka_kk_auto_korko = autolaina_alku * (auto_korko / 100 / 12)
     eka_kk_as_korko = asuntolaina_maara * (as_korko / 100 / 12) if osto_vuosi == 0 else 0
     nykyinen_asumiskulu = (vastike + as_lyhennys + eka_kk_as_korko) if osto_vuosi == 0 else vuokra
